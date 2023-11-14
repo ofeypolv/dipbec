@@ -117,7 +117,13 @@ class dipolarBEC():
 		# Copy Camilla's Code !!CCC!!
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
 		return ipr( vec[-1] )
-	
+
+	def iprAlltStates(self, nb):
+		ham = self.makeBogoMat(nb)
+		# Copy Camilla's Code !!CCC!!
+		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
+		return [ipr( vec[i] ) for i in range(len(vec))]
+
 	def wfLowestState(self):
 		nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
 		ham = self.makeBogoMat(nb)
@@ -139,4 +145,18 @@ class dipolarBEC():
 			iprvec.append( self.iprLowestState(nb)  )
 
 		return np.mean(iprvec)
+
+	def IPRAllDisr(self):
+		iprvec = []
+		for i in range( self.Ndisr ):
+			# create a disorder realization
+			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
+			# force that sum is Ntubes
+			offset = np.sum(nb) - self.Ntubes 
+			nb = nb - offset/self.Ntubes
+
+			# get the ipr
+			iprvec.append( self.iprAlltStates(nb)  )
+
+		return np.mean(iprvec, axis=0)
 	
