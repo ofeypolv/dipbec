@@ -8,6 +8,7 @@ import math
 from scipy import sparse #sparse matrices (efficient data storage)
 from scipy import linalg #linear algebra routines for small matrices
 from scipy.sparse import linalg as sparse_linalg #linear algebra for big sparse matrices
+from scipy.special import kn #modified Bessel function of the second kind of integer order n
 
 from tqdm import tqdm
 
@@ -16,15 +17,17 @@ from tqdm import tqdm
 def valvec(Hk):
 	val, vec = linalg.eigh(Hk,eigvals_only=False)
 	mask = np.logical_or(np.round(val.real,10)>0,np.round(val.imag,10)>0)
-	val = val[mask]
-	vec = vec[mask]
-	return val, vec
+	vval = val[mask]
+	vvec = vec[:, mask]
+	#print('valvec', np.shape(val), np.shape(vec))
+	#print('vvalvec', np.shape(vval), np.shape(vvec))
+	return vval, vvec
 
 def valvec_sparse(Hk,nbands,Ef):
 	val, vec = sparse_linalg.eigsh(Hk,k=nbands,sigma=Ef,return_eigenvectors=True)
 	mask = np.logical_or(np.round(val.real,10)>0,np.round(val.imag,10)>0)
 	val = val[mask]
-	vec = vec[mask]
+	vec = vec[:, mask]
 	return val, vec
 
 def ipr(v):
@@ -69,6 +72,7 @@ class dipolarBEC():
 		Ud,	        # dipolar NN interaction
 		Ndisr,      # disorder realizations to average over
 		sigma,		# width of densities distributed along the tubes
+		NN_int = True,		# binary variable for NN vs 1/x^3 interaction
 		sparseAlgo = [False, 80, 0.0],	# sparse = False, number of states = 80, around E = 0
 		prestr = '',				# prefix string for saving files
 		endstr = '',				# suffix string for saving files
@@ -77,7 +81,8 @@ class dipolarBEC():
 		# save the global variables to self
 		self.Ntubes = int(Ntubes)
 		self.kx = kx
-		self.Uc = Uc 
+		self.Uc = Uc
+		self.NN_int = NN_int 
 		self.Ud = Ud
 		self.Ndisr = int(Ndisr)
 		self.sigma = sigma
@@ -105,31 +110,56 @@ class dipolarBEC():
 					h_1[i,j] = (self.kx**2)/(2.0) + self.Uc*nb[i]
 					h_2[i,j] = self.Uc*nb[i]
 				else:
-					if (abs(i-j)<2): #Nearest neighbor dipolar interaction
-						h_1[i,j] = self.Ud*(math.sqrt(nb[i]*nb[j]))
-						h_2[i,j] = self.Ud*(math.sqrt(nb[i]*nb[j]))
+					if self.NN_int:
+						if (abs(i-j)<2): #Nearest neighbor dipolar interaction
+							h_1[i,j] = self.Ud*(math.sqrt(nb[i]*nb[j]))
+							h_2[i,j] = self.Ud*(math.sqrt(nb[i]*nb[j]))
+					else: #1/x^3 dipolar interaction
+						h_1[i,j] = self.Ud*(math.sqrt(nb[i]*nb[j]))*2*self.kx*kn(1,abs(i-j)*self.kx)/(abs(i-j))
+						h_2[i,j] = self.Ud*(math.sqrt(nb[i]*nb[j]))*2*self.kx*kn(1,abs(i-j)*self.kx)/(abs(i-j))
+
+
 		Haml = np.block([[h_1,h_2],[-h_2,-h_1]])
 
 		return Haml
+
+	def BogUV(self, nb):
+	# given the Bogo matrix, we extract the U and V matrices from its eigenvectors
+		identity_matrix_n = np.eye(self.Ntubes)
+		zero_matrix_n = np.zeros((self.Ntubes, self.Ntubes))
+		s3n = np.block([[identity_matrix_n, zero_matrix_n],[zero_matrix_n, identity_matrix_n]]) #s3n is the n-dim pauli matrix sigmaz
+		pn = np.block([[zero_matrix_n, identity_matrix_n],[-1*identity_matrix_n, zero_matrix_n]]) #pn is the n-dim parity matrix
+		ham = self.makeBogoMat(nb)
+		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2])
+		sort_index = np.argsort(val)
+		val_s = val[sort_index]
+    	vec_s = vec[:, sort_index]
+		for i in range(vec_s.shape[1]): #normalize the eigenvectors wrt matrix s3n
+			vec_s[:, i] = vec_s[:, i] / np.sqrt(np.matmul(vec_s[:, i].T, np.matmul(s3n, vec_s[:, i])))
+		for i in range(vec_s.shape[1]): #define bottom half of eigenvectors through the parity matrix pn
+			vec_s[:, i] = np.matmul(pn, np.conj(vec_s[:, i]))
+		U = vec_s[0:self.Ntubes, :]
+		V = vec_s[self.Ntubes:, :]
+		return U,V
 
 	def iprLowestState(self, nb):
 		ham = self.makeBogoMat(nb)
 		# Copy Camilla's Code !!CCC!!
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
-		return ipr( vec[-1] )
+		return ipr( vec[:, -1] )
 
 	def iprAlltStates(self, nb):
 		ham = self.makeBogoMat(nb)
 		# Copy Camilla's Code !!CCC!!
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
-		return [ipr( vec[i] ) for i in range(len(vec))]
+		return [ipr( vec[:, i] ) for i in range(vec.shape[1])]
 
 	def wfLowestState(self):
 		nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
 		ham = self.makeBogoMat(nb)
 		# Copy Camilla's Code !!CCC!!
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
-		return wf( vec[-1] )
+		return wf( vec[:, -1] )
 
 
 	def IPRDisr(self):
@@ -160,3 +190,9 @@ class dipolarBEC():
 
 		return np.mean(iprvec, axis=0)
 	
+
+	def viscosity(self, t):
+
+		visc = 0
+
+		return visc 
