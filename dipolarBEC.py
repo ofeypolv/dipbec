@@ -44,6 +44,11 @@ def wf(v):
 	print('fold-v2', np.shape(fold(v)), np.shape(v))
 	return fold(v)
 
+def summ(a,b,N):
+	if a+b <= N:
+		return a+b
+	else:
+		return a+b-N
 
 ####################################################################
 #### 					THE CLASS BEGINS						####
@@ -72,7 +77,7 @@ class dipolarBEC():
 		Ud,	        # dipolar NN interaction
 		Ndisr,      # disorder realizations to average over
 		sigma,		# width of densities distributed along the tubes
-		NN_int = True,		# binary variable for NN vs 1/x^3 interaction
+		NN_int = False,		# binary variable for NN vs 1/x^3 interaction
 		sparseAlgo = [False, 80, 0.0],	# sparse = False, number of states = 80, around E = 0
 		prestr = '',				# prefix string for saving files
 		endstr = '',				# suffix string for saving files
@@ -128,19 +133,31 @@ class dipolarBEC():
 		identity_matrix_n = np.eye(self.Ntubes)
 		zero_matrix_n = np.zeros((self.Ntubes, self.Ntubes))
 		s3n = np.block([[identity_matrix_n, zero_matrix_n],[zero_matrix_n, identity_matrix_n]]) #s3n is the n-dim pauli matrix sigmaz
-		pn = np.block([[zero_matrix_n, identity_matrix_n],[-1*identity_matrix_n, zero_matrix_n]]) #pn is the n-dim parity matrix
+		pn = np.block([[zero_matrix_n, identity_matrix_n],[1*identity_matrix_n, zero_matrix_n]]) #pn is the n-dim parity matrix
 		ham = self.makeBogoMat(nb)
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2])
+		#print(val)
+		#print(vec.T)
 		sort_index = np.argsort(val)
 		val_s = val[sort_index]
-    	vec_s = vec[:, sort_index]
+		vec_s = vec[:, sort_index]
+		#print(val_s)
+		#print(vec_s.T)
+		pvec_s = np.empty_like(vec_s)
+		for i in range(vec_s.shape[1]): #define bottom half of eigenvectors through the parity matrix pn
+			pvec_s[:, i] = np.matmul(pn, np.conj(vec_s[:, i]))
+		#print(pvec_s.T)
+		vec_s = np.concatenate((vec_s, pvec_s), axis=1)
 		for i in range(vec_s.shape[1]): #normalize the eigenvectors wrt matrix s3n
 			vec_s[:, i] = vec_s[:, i] / np.sqrt(np.matmul(vec_s[:, i].T, np.matmul(s3n, vec_s[:, i])))
-		for i in range(vec_s.shape[1]): #define bottom half of eigenvectors through the parity matrix pn
-			vec_s[:, i] = np.matmul(pn, np.conj(vec_s[:, i]))
-		U = vec_s[0:self.Ntubes, :]
-		V = vec_s[self.Ntubes:, :]
-		return U,V
+		#print(vec_s.T)
+		U = vec_s[0:self.Ntubes, 0:self.Ntubes]
+		V = vec_s[self.Ntubes:, 0:self.Ntubes]
+		#T = np.block([[U, V], [np.conj(V), np.conj(U)]])
+		#np.set_printoptions(precision=2, suppress=True)
+		#print(U)
+		#print(V)
+		return val_s,U,V
 
 	def iprLowestState(self, nb):
 		ham = self.makeBogoMat(nb)
@@ -160,7 +177,6 @@ class dipolarBEC():
 		# Copy Camilla's Code !!CCC!!
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
 		return wf( vec[:, -1] )
-
 
 	def IPRDisr(self):
 		iprvec = []
@@ -190,9 +206,8 @@ class dipolarBEC():
 
 		return np.mean(iprvec, axis=0)
 	
-
-	def viscosity(self, t):
-
-		visc = 0
-
-		return visc 
+	def visc_k(self,ny,t): 
+		nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
+		val_s,U,V = self.BogUV(nb)
+		intd_k = sum(sum(sum(2*(self.kx**2)*np.imag((U[y-1,i-1]*np.conj(V[summ(y-1,ny-1,self.Ntubes -1),i-1])*V[y-1,j-1]*np.conj(U[summ(y-1,ny-1,self.Ntubes -1),j-1])-U[y-1,i-1]*np.conj(U[summ(y-1,ny-1,self.Ntubes -1),i-1])*V[y-1,j-1]*np.conj(V[summ(y-1,ny-1,self.Ntubes -1),j-1]))*np.exp(-1j*(val_s[i-1] + val_s[j-1])*t)) for j in range(1,self.Ntubes + 1)) for i in range(1,self.Ntubes + 1)) for y in range(1,self.Ntubes + 1))
+		return intd_k
