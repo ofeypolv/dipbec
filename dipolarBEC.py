@@ -48,7 +48,7 @@ def summ(a,b,N):
 	if a+b <= N:
 		return a+b
 	else:
-		return a+b-N
+		return a+b-N #summation with periodic boundary conditions
 
 ####################################################################
 #### 					THE CLASS BEGINS						####
@@ -209,5 +209,13 @@ class dipolarBEC():
 	def visc_k(self,ny,t): 
 		nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
 		val_s,U,V = self.BogUV(nb)
-		intd_k = sum(sum(sum(2*(self.kx**2)*np.imag((U[y-1,i-1]*np.conj(V[summ(y-1,ny-1,self.Ntubes -1),i-1])*V[y-1,j-1]*np.conj(U[summ(y-1,ny-1,self.Ntubes -1),j-1])-U[y-1,i-1]*np.conj(U[summ(y-1,ny-1,self.Ntubes -1),i-1])*V[y-1,j-1]*np.conj(V[summ(y-1,ny-1,self.Ntubes -1),j-1]))*np.exp(-1j*(val_s[i-1] + val_s[j-1])*t)) for j in range(1,self.Ntubes + 1)) for i in range(1,self.Ntubes + 1)) for y in range(1,self.Ntubes + 1))
+		intd_k = 0
+
+		for y in range(1,self.Ntubes + 1):
+			for i in range(1,self.Ntubes + 1):
+				for j in range(1,self.Ntubes + 1):
+					if y+ny <= self.Ntubes:
+						intd_k += 2*(self.kx**2)*np.imag((U[y-1,i-1]*np.conj(V[y+ny-1,i-1])*V[y-1,j-1]*np.conj(U[y+ny-1,j-1])-U[y-1,i-1]*np.conj(U[y+ny-1,i-1])*V[y-1,j-1]*np.conj(V[y+ny-1,j-1]))*np.exp(-1j*(val_s[i-1] + val_s[j-1])*t))
+					else:
+						intd_k += 0
 		return intd_k
