@@ -49,6 +49,9 @@ def summ(a,b,N):
 		return a+b
 	else:
 		return a+b-N #summation with periodic boundary conditions
+	
+def dirac_delta(x, a): #Dirac delta as a limit of a Lorentzian, a=1e-3
+    return a / (x**2 + a**2) 
 
 ####################################################################
 #### 					THE CLASS BEGINS						####
@@ -140,6 +143,7 @@ class dipolarBEC():
 		#print(vec.T)
 		sort_index = np.argsort(val)
 		val_s = val[sort_index]
+		vec_s_old = vec
 		vec_s = vec[:, sort_index]
 		#print(val_s)
 		#print(vec_s.T)
@@ -147,7 +151,8 @@ class dipolarBEC():
 		for i in range(vec_s.shape[1]): #define bottom half of eigenvectors through the parity matrix pn
 			pvec_s[:, i] = np.matmul(pn, np.conj(vec_s[:, i]))
 		#print(pvec_s.T)
-		vec_s = np.concatenate((vec_s, pvec_s), axis=1)
+		vec_s = np.concatenate((vec_s, pvec_s), axis=1)		
+
 		for i in range(vec_s.shape[1]): #normalize the eigenvectors wrt matrix s3n
 			vec_s[:, i] = vec_s[:, i] / np.sqrt(np.matmul(vec_s[:, i].T, np.matmul(s3n, vec_s[:, i])))
 		#print(vec_s.T)
@@ -206,7 +211,7 @@ class dipolarBEC():
 
 		return np.mean(iprvec, axis=0)
 	
-	def visc_k(self,ny,t): 
+	'''def visc_k(self,ny,t): 
 		nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
 		val_s,U,V = self.BogUV(nb)
 		intd_k = 0
@@ -215,7 +220,47 @@ class dipolarBEC():
 			for i in range(1,self.Ntubes + 1):
 				for j in range(1,self.Ntubes + 1):
 					if y+ny <= self.Ntubes:
-						intd_k += 2*(self.kx**2)*np.imag((U[y-1,i-1]*np.conj(V[y+ny-1,i-1])*V[y-1,j-1]*np.conj(U[y+ny-1,j-1])-U[y-1,i-1]*np.conj(U[y+ny-1,i-1])*V[y-1,j-1]*np.conj(V[y+ny-1,j-1]))*np.exp(-1j*(val_s[i-1] + val_s[j-1])*t))
+						intd_k += 2*(self.kx**2)*np.imag((U[y-1,i-1]*np.conj(U[y+ny-1,i-1])*V[y-1,j-1]*np.conj(V[y+ny-1,j-1])-U[y-1,i-1]*np.conj(V[y+ny-1,i-1])*V[y-1,j-1]*np.conj(U[y+ny-1,j-1]))*np.exp(-1j*(val_s[i-1] + val_s[j-1])*t))
+						#intd_k += (1j)*(self.kx**2)*((np.conj(U[y-1,i-1])*U[y+ny-1,i-1]*np.conj(V[y-1,j-1])*V[y+ny-1,j-1]*np.exp(1j*(val_s[i-1] + val_s[j-1])*t)-U[y-1,i-1]*np.conj(U[y+ny-1,i-1])*V[y-1,j-1]*np.conj(V[y+ny-1,j-1])*np.exp(-1j*(val_s[i-1] + val_s[j-1])*t))-(np.conj(U[y-1,i-1])*V[y+ny-1,i-1]*np.conj(V[y-1,j-1])*U[y+ny-1,j-1]*np.exp(1j*(val_s[i-1] + val_s[j-1])*t)-U[y-1,i-1]*np.conj(V[y+ny-1,i-1])*V[y-1,j-1]*np.conj(U[y+ny-1,j-1])*np.exp(-1j*(val_s[i-1] + val_s[j-1])*t)))
 					else:
 						intd_k += 0
+
+		return intd_k'''
+	
+	
+	def visc_k_ij(self, ny, i,j, nb): 
+		val_s, U, V = self.BogUV(nb)
+		int_k = 0
+
+		for y in range(1,self.Ntubes + 1):
+			if y+ny <= self.Ntubes:
+				term_uuvv = U[y-1,i-1]*np.conj(U[y+ny-1,i-1])*V[y-1,j-1]*np.conj(V[y+ny-1,j-1])
+				term_uvvu = U[y-1,i-1]*np.conj(V[y+ny-1,i-1])*V[y-1,j-1]*np.conj(U[y+ny-1,j-1])
+				int_k += (self.kx**2)*(term_uuvv - term_uvvu)
+			else:
+				int_k += 0
+
+		return int_k
+
+	def visc_k_time(self,ny, time, nb): 
+		val_s,U,V = self.BogUV(nb)
+		intd_k = 0
+
+		for i in range(1,self.Ntubes + 1):
+			for j in range(1,self.Ntubes + 1):
+				intd_k += -2*self.visc_k_ij(ny,i,j,nb)*np.sin( (val_s[i-1] + val_s[j-1] )*time)
+
 		return intd_k
+
+
+	def visc_k_om(self,ny,om, nb, Gamma): 
+		val_s,U,V = self.BogUV(nb)
+		intd_ko = 0
+
+		for i in range(1,self.Ntubes + 1):
+			for j in range(1,self.Ntubes + 1):
+				fc_plus = 1/(om + val_s[i-1] + val_s[j-1] + 1j*Gamma ) #plemelj-sokhotski formula
+				fc_mnus = 1/(om - val_s[i-1] - val_s[j-1] + 1j*Gamma ) #plemelj-sokhotski formula
+				intd_ko += self.visc_k_ij(ny,i,j,nb)*(fc_plus-fc_mnus)
+
+		return intd_ko
