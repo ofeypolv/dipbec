@@ -15,19 +15,23 @@ from tqdm import tqdm
 # helper functions
 
 def valvec(Hk):
-	val, vec = linalg.eigh(Hk,eigvals_only=False)
+	val, vec = linalg.eig(Hk)
 	mask = np.logical_or(np.round(val.real,10)>0,np.round(val.imag,10)>0)
 	vval = val[mask]
 	vvec = vec[:, mask]
-	#print('valvec', np.shape(val), np.shape(vec))
-	#print('vvalvec', np.shape(vval), np.shape(vvec))
+	idx = vval.argsort()
+	vval = vval[idx]
+	vvec = vvec[:, idx]
 	return vval, vvec
 
 def valvec_sparse(Hk,nbands,Ef):
-	val, vec = sparse_linalg.eigsh(Hk,k=nbands,sigma=Ef,return_eigenvectors=True)
+	val, vec = sparse_linalg.eigs(Hk,k=nbands,sigma=Ef)
 	mask = np.logical_or(np.round(val.real,10)>0,np.round(val.imag,10)>0)
 	val = val[mask]
 	vec = vec[:, mask]
+	idx = val.argsort()
+	val = val[idx]
+	vec = vec[:, idx]
 	return val, vec
 
 def ipr(v):
@@ -41,7 +45,7 @@ def fold(v):
 	return v1**2 + v2**2
 
 def wf(v):
-	print('fold-v2', np.shape(fold(v)), np.shape(v))
+	#print('fold-v2', np.shape(fold(v)), np.shape(v))
 	return fold(v)
 
 def summ(a,b,N):
@@ -138,31 +142,19 @@ class dipolarBEC():
 		s3n = np.block([[identity_matrix_n, zero_matrix_n],[zero_matrix_n, identity_matrix_n]]) #s3n is the n-dim pauli matrix sigmaz
 		pn = np.block([[zero_matrix_n, identity_matrix_n],[1*identity_matrix_n, zero_matrix_n]]) #pn is the n-dim parity matrix
 		ham = self.makeBogoMat(nb)
+		#Normalize the eigenvectors wrt matrix s3n using broadcasting
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2])
-		#print(val)
-		#print(vec.T)
-		sort_index = np.argsort(val)
-		val_s = val[sort_index]
-		vec_s_old = vec
-		vec_s = vec[:, sort_index]
-		#print(val_s)
-		#print(vec_s.T)
-		pvec_s = np.empty_like(vec_s)
-		for i in range(vec_s.shape[1]): #define bottom half of eigenvectors through the parity matrix pn
-			pvec_s[:, i] = np.matmul(pn, np.conj(vec_s[:, i]))
-		#print(pvec_s.T)
-		vec_s = np.concatenate((vec_s, pvec_s), axis=1)		
-
-		for i in range(vec_s.shape[1]): #normalize the eigenvectors wrt matrix s3n
-			vec_s[:, i] = vec_s[:, i] / np.sqrt(np.matmul(vec_s[:, i].T, np.matmul(s3n, vec_s[:, i])))
-		#print(vec_s.T)
+		normalization = np.sqrt(np.einsum('ij,ij->j', vec, np.matmul(s3n, vec)))
+		vec /= normalization
+		#for i in range(vec.shape[1]): #normalize the eigenvectors wrt matrix s3n
+			#vec[:, i] = vec[:, i] / np.sqrt(np.matmul(vec[:, i].T, np.matmul(s3n, vec_s[:, i])))
+		pvec = np.matmul(pn, np.conj(vec)) #define bottom half of eigenvectors through the parity matrix pn
+		vec_s = np.concatenate((vec, pvec), axis=1)		
 		U = vec_s[0:self.Ntubes, 0:self.Ntubes]
 		V = vec_s[self.Ntubes:, 0:self.Ntubes]
 		#T = np.block([[U, V], [np.conj(V), np.conj(U)]])
 		#np.set_printoptions(precision=2, suppress=True)
-		#print(U)
-		#print(V)
-		return val_s,U,V
+		return val,U,V
 
 	def iprLowestState(self, nb):
 		ham = self.makeBogoMat(nb)
@@ -174,7 +166,10 @@ class dipolarBEC():
 		ham = self.makeBogoMat(nb)
 		# Copy Camilla's Code !!CCC!!
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
-		return [ipr( vec[:, i] ) for i in range(vec.shape[1])]
+		iprv = [ipr( vec[:, i] ) for i in range(vec.shape[1])]
+		#print(f'val:{val}')
+		#print(f'iprv:{iprv}')
+		return [val, iprv]
 
 	def wfLowestState(self):
 		nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
@@ -191,7 +186,6 @@ class dipolarBEC():
 			# force that sum is Ntubes
 			offset = np.sum(nb) - self.Ntubes 
 			nb = nb - offset/self.Ntubes
-
 			# get the ipr
 			iprvec.append( self.iprLowestState(nb)  )
 
@@ -199,34 +193,17 @@ class dipolarBEC():
 
 	def IPRAllDisr(self):
 		iprvec = []
+		iprval = []
 		for i in range( self.Ndisr ):
 			# create a disorder realization
 			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
 			# force that sum is Ntubes
 			offset = np.sum(nb) - self.Ntubes 
 			nb = nb - offset/self.Ntubes
-
-			# get the ipr
-			iprvec.append( self.iprAlltStates(nb)  )
-
-		return np.mean(iprvec, axis=0)
-	
-	'''def visc_k(self,ny,t): 
-		nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
-		val_s,U,V = self.BogUV(nb)
-		intd_k = 0
-
-		for y in range(1,self.Ntubes + 1):
-			for i in range(1,self.Ntubes + 1):
-				for j in range(1,self.Ntubes + 1):
-					if y+ny <= self.Ntubes:
-						intd_k += 2*(self.kx**2)*np.imag((U[y-1,i-1]*np.conj(U[y+ny-1,i-1])*V[y-1,j-1]*np.conj(V[y+ny-1,j-1])-U[y-1,i-1]*np.conj(V[y+ny-1,i-1])*V[y-1,j-1]*np.conj(U[y+ny-1,j-1]))*np.exp(-1j*(val_s[i-1] + val_s[j-1])*t))
-						#intd_k += (1j)*(self.kx**2)*((np.conj(U[y-1,i-1])*U[y+ny-1,i-1]*np.conj(V[y-1,j-1])*V[y+ny-1,j-1]*np.exp(1j*(val_s[i-1] + val_s[j-1])*t)-U[y-1,i-1]*np.conj(U[y+ny-1,i-1])*V[y-1,j-1]*np.conj(V[y+ny-1,j-1])*np.exp(-1j*(val_s[i-1] + val_s[j-1])*t))-(np.conj(U[y-1,i-1])*V[y+ny-1,i-1]*np.conj(V[y-1,j-1])*U[y+ny-1,j-1]*np.exp(1j*(val_s[i-1] + val_s[j-1])*t)-U[y-1,i-1]*np.conj(V[y+ny-1,i-1])*V[y-1,j-1]*np.conj(U[y+ny-1,j-1])*np.exp(-1j*(val_s[i-1] + val_s[j-1])*t)))
-					else:
-						intd_k += 0
-
-		return intd_k'''
-	
+			# get the ipr and the corresponding energy
+			iprvec.append( self.iprAlltStates(nb)[1]  )
+			iprval.append( self.iprAlltStates(nb)[0]  )
+		return np.mean(iprval, axis=0),np.mean(iprvec, axis=0)
 	
 	def visc_k_ij(self, ny, i,j, nb): 
 		val_s, U, V = self.BogUV(nb)
@@ -253,14 +230,14 @@ class dipolarBEC():
 		return intd_k
 
 
-	def visc_k_om(self,ny,om, nb, Gamma): 
+	def visc_k_om(self,ny,om, nb, gamma): 
 		val_s,U,V = self.BogUV(nb)
 		intd_ko = 0
 
 		for i in range(1,self.Ntubes + 1):
 			for j in range(1,self.Ntubes + 1):
-				fc_plus = 1/(om + val_s[i-1] + val_s[j-1] + 1j*Gamma ) #plemelj-sokhotski formula
-				fc_mnus = 1/(om - val_s[i-1] - val_s[j-1] + 1j*Gamma ) #plemelj-sokhotski formula
+				fc_plus = 1/(om + val_s[i-1] + val_s[j-1] + 1j*gamma ) #plemelj-sokhotski formula
+				fc_mnus = 1/(om - val_s[i-1] - val_s[j-1] + 1j*gamma ) #plemelj-sokhotski formula
 				intd_ko += self.visc_k_ij(ny,i,j,nb)*(fc_plus-fc_mnus)
 
 		return intd_ko
