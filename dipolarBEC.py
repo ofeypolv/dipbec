@@ -84,7 +84,7 @@ class dipolarBEC():
 		Ud,	        # dipolar NN interaction
 		Ndisr,      # disorder realizations to average over
 		sigma,		# width of densities distributed along the tubes
-		NN_int = True,		# binary variable for NN vs 1/x^3 interaction
+		NN_int = False,		# binary variable for NN vs 1/x^3 interaction
 		sparseAlgo = [False, 80, 0.0],	# sparse = False, number of states = 80, around E = 0
 		prestr = '',				# prefix string for saving files
 		endstr = '',				# suffix string for saving files
@@ -162,7 +162,7 @@ class dipolarBEC():
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
 		return ipr( vec[:, -1] )
 
-	def iprAlltStates(self, nb):
+	def iprAllStates(self, nb):
 		ham = self.makeBogoMat(nb)
 		# Copy Camilla's Code !!CCC!!
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
@@ -201,8 +201,8 @@ class dipolarBEC():
 			offset = np.sum(nb) - self.Ntubes 
 			nb = nb - offset/self.Ntubes
 			# get the ipr and the corresponding energy
-			iprvec.append( self.iprAlltStates(nb)[1]  )
-			iprval.append( self.iprAlltStates(nb)[0]  )
+			iprvec.append( self.iprAllStates(nb)[1]  )
+			iprval.append( self.iprAllStates(nb)[0]  )
 		return np.mean(iprval, axis=0),np.mean(iprvec, axis=0)
 	
 	def visc_k_ij(self, ny, i,j, nb): 
