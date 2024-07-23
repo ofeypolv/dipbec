@@ -38,11 +38,29 @@ def ipr(v):
 	v = np.asarray(v)
 	return np.sum(np.abs(v**4))
 
+def csi(v):
+	v = np.asarray(v)
+	return 1/(np.sum(np.abs(v**4)))
+
 def fold(v):
 	Nt = int( np.shape(v)[0]/2 )
 	v1 = v[0: Nt ]
 	v2 = v[Nt : ]
 	return v1**2 + v2**2
+
+def iprfd(v):
+	v = np.asarray(v)
+	Nt = int( np.shape(v)[0]/2 )
+	v1 = v[0: Nt ]
+	v2 = v[Nt : ]
+	#print('check state normalization:', np.sum(np.abs(v1**2 - v2**2)))
+	return np.sum(np.abs((v1**2 - v2**2)**2))
+
+def csifd(v):
+	Nt = int( np.shape(v)[0]/2 )
+	v1 = v[0: Nt ]
+	v2 = v[Nt : ]
+	return 1/(np.sum(np.abs((v1**2 - v2**2)**2)))
 
 def wf(v):
 	#print('fold-v2', np.shape(fold(v)), np.shape(v))
@@ -112,7 +130,6 @@ class dipolarBEC():
 
 	def makeBogoMat(self, nb):
 		# given an array of Boson densities, make the Bogo Matrix
-		# Copy Camilla's Code !!CCC!!
 		h_1 = np.zeros( [self.Ntubes, self.Ntubes] )
 		h_2 = np.zeros( [self.Ntubes, self.Ntubes] )
 
@@ -139,7 +156,7 @@ class dipolarBEC():
 	# given the Bogo matrix, we extract the U and V matrices from its eigenvectors
 		identity_matrix_n = np.eye(self.Ntubes)
 		zero_matrix_n = np.zeros((self.Ntubes, self.Ntubes))
-		s3n = np.block([[identity_matrix_n, zero_matrix_n],[zero_matrix_n, identity_matrix_n]]) #s3n is the n-dim pauli matrix sigmaz
+		s3n = np.block([[identity_matrix_n, zero_matrix_n],[zero_matrix_n, -identity_matrix_n]]) #s3n is the n-dim pauli matrix sigmaz
 		pn = np.block([[zero_matrix_n, identity_matrix_n],[1*identity_matrix_n, zero_matrix_n]]) #pn is the n-dim parity matrix
 		ham = self.makeBogoMat(nb)
 		#Normalize the eigenvectors wrt matrix s3n using broadcasting
@@ -155,30 +172,101 @@ class dipolarBEC():
 		#T = np.block([[U, V], [np.conj(V), np.conj(U)]])
 		#np.set_printoptions(precision=2, suppress=True)
 		return val,U,V
-
-	def iprLowestState(self, nb):
-		ham = self.makeBogoMat(nb)
-		# Copy Camilla's Code !!CCC!!
-		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
-		return ipr( vec[:, -1] )
-
-	def iprAllStates(self, nb):
-		ham = self.makeBogoMat(nb)
-		# Copy Camilla's Code !!CCC!!
-		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
-		iprv = [ipr( vec[:, i] ) for i in range(vec.shape[1])]
-		#print(f'val:{val}')
-		#print(f'iprv:{iprv}')
-		return [val, iprv]
-
+	
+	def norm(self,vec):
+		identity_matrix_n = np.eye(self.Ntubes)
+		zero_matrix_n = np.zeros((self.Ntubes, self.Ntubes))
+		s3n = np.block([[identity_matrix_n, zero_matrix_n],[zero_matrix_n, -identity_matrix_n]])
+		normalization = np.sqrt(np.einsum('ij,ij->j', vec, np.matmul(s3n, vec)))
+		vec = vec / normalization
+		return vec
+	
 	def wfLowestState(self):
 		nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
 		ham = self.makeBogoMat(nb)
-		# Copy Camilla's Code !!CCC!!
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
-		return wf( vec[:, -1] )
+		vec = self.norm(vec)
+		return wf( vec[:, 0] )
+	
+	### IPR FUNCTIONS
 
-	def IPRDisr(self):
+	def iprLowestState(self, nb):
+		ham = self.makeBogoMat(nb)
+		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
+		#vec = self.norm(vec)
+		return ipr( vec[:, 0] )
+	
+	def csiLowestState(self, nb):
+		ham = self.makeBogoMat(nb)
+		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
+		#vec = self.norm(vec)
+		return csi( vec[:, 0] )
+	
+	def iprLowestStatefd(self, nb):
+		ham = self.makeBogoMat(nb)
+		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
+		vec = self.norm(vec)
+		return iprfd( vec[:, 0] )
+	
+	def csiLowestStatefd(self, nb):
+		ham = self.makeBogoMat(nb)
+		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
+		vec = self.norm(vec)
+		return csifd( vec[:, 0] )
+	
+	def iprMidState(self, nb):
+		ham = self.makeBogoMat(nb)
+		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
+		#vec = self.norm(vec)
+		Lm = vec.shape[1] // 2
+		return ipr( vec[:, Lm] )
+	
+	def csiMidState(self, nb):
+		ham = self.makeBogoMat(nb)
+		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
+		#vec = self.norm(vec)
+		Lm = vec.shape[1] // 2
+		return csi( vec[:, Lm] )
+	
+	def iprMidStatefd(self, nb):
+		ham = self.makeBogoMat(nb)
+		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
+		vec = self.norm(vec)
+		Lm = vec.shape[1] // 2
+		return iprfd( vec[:, Lm] )
+	
+	def csiMidStatefd(self, nb):
+		ham = self.makeBogoMat(nb)
+		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
+		vec = self.norm(vec)
+		Lm = vec.shape[1] // 2
+		return csifd( vec[:, Lm] )
+	
+	def iprHighestState(self, nb):
+		ham = self.makeBogoMat(nb)
+		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
+		#vec = self.norm(vec)
+		return ipr(vec[:, -1])
+	
+	def csiHighestState(self, nb):
+		ham = self.makeBogoMat(nb)
+		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
+		#vec = self.norm(vec)
+		return csi(vec[:, -1])
+	
+	def iprHighestStatefd(self, nb):
+		ham = self.makeBogoMat(nb)
+		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
+		vec = self.norm(vec)
+		return iprfd(vec[:, -1])
+	
+	def csiHighestStatefd(self, nb):
+		ham = self.makeBogoMat(nb)
+		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
+		vec = self.norm(vec)
+		return csifd(vec[:, -1])
+	
+	def LIPRDisr(self):
 		iprvec = []
 		for i in range( self.Ndisr ):
 			# create a disorder realization
@@ -188,9 +276,168 @@ class dipolarBEC():
 			nb = nb - offset/self.Ntubes
 			# get the ipr
 			iprvec.append( self.iprLowestState(nb)  )
+		
+		return np.mean(iprvec)
+	
+	def LCSIDisr(self):
+		csivec = []
+		for i in range( self.Ndisr ):
+			# create a disorder realization
+			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
+			# force that sum is Ntubes
+			offset = np.sum(nb) - self.Ntubes 
+			nb = nb - offset/self.Ntubes
+			# get the ipr
+			csivec.append( self.csiLowestState(nb)  )
+		
+		return np.mean(csivec)
+	
+	def LIPRDisrfd(self):
+		iprvec = []
+		for i in range( self.Ndisr ):
+			# create a disorder realization
+			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
+			# force that sum is Ntubes
+			offset = np.sum(nb) - self.Ntubes 
+			nb = nb - offset/self.Ntubes
+			# get the ipr
+			iprvec.append( self.iprLowestStatefd(nb)  )
+		
+		return np.mean(iprvec)
+	
+	def LCSIDisrfd(self):
+		csivec = []
+		for i in range( self.Ndisr ):
+			# create a disorder realization
+			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
+			# force that sum is Ntubes
+			offset = np.sum(nb) - self.Ntubes 
+			nb = nb - offset/self.Ntubes
+			# get the ipr
+			csivec.append( self.csiLowestStatefd(nb)  )
+		
+		return np.mean(csivec)
+	
+	def MIPRDisr(self):
+		iprvec = []
+		for i in range( self.Ndisr ):
+			# create a disorder realization
+			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
+			# force that sum is Ntubes
+			offset = np.sum(nb) - self.Ntubes 
+			nb = nb - offset/self.Ntubes
+			# get the ipr
+			iprvec.append( self.iprMidState(nb)  )
 
 		return np.mean(iprvec)
+	
+	def MCSIDisr(self):
+		csivec = []
+		for i in range( self.Ndisr ):
+			# create a disorder realization
+			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
+			# force that sum is Ntubes
+			offset = np.sum(nb) - self.Ntubes 
+			nb = nb - offset/self.Ntubes
+			# get the ipr
+			csivec.append( self.csiMidState(nb)  )
 
+		return np.mean(csivec)
+	
+	def MIPRDisrfd(self):
+		iprvec = []
+		for i in range( self.Ndisr ):
+			# create a disorder realization
+			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
+			# force that sum is Ntubes
+			offset = np.sum(nb) - self.Ntubes 
+			nb = nb - offset/self.Ntubes
+			# get the ipr
+			iprvec.append( self.iprMidStatefd(nb)  )
+
+		return np.mean(iprvec)
+	
+	def MCSIDisrfd(self):
+		csivec = []
+		for i in range( self.Ndisr ):
+			# create a disorder realization
+			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
+			# force that sum is Ntubes
+			offset = np.sum(nb) - self.Ntubes 
+			nb = nb - offset/self.Ntubes
+			# get the ipr
+			csivec.append( self.csiMidStatefd(nb)  )
+
+		return np.mean(csivec)
+
+	def HIPRDisr(self):
+		iprvec = []
+		for i in range( self.Ndisr ):
+			# create a disorder realization
+			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
+			# force that sum is Ntubes
+			offset = np.sum(nb) - self.Ntubes 
+			nb = nb - offset/self.Ntubes
+			# get the ipr
+			iprvec.append( self.iprHighestState(nb)  )
+
+		return np.mean(iprvec)
+	
+	def HCSIDisr(self):
+		csivec = []
+		for i in range( self.Ndisr ):
+			# create a disorder realization
+			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
+			# force that sum is Ntubes
+			offset = np.sum(nb) - self.Ntubes 
+			nb = nb - offset/self.Ntubes
+			# get the ipr
+			csivec.append( self.csiHighestState(nb)  )
+
+		return np.mean(csivec)
+	
+	def HIPRDisrfd(self):
+		iprvec = []
+		for i in range( self.Ndisr ):
+			# create a disorder realization
+			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
+			# force that sum is Ntubes
+			offset = np.sum(nb) - self.Ntubes 
+			nb = nb - offset/self.Ntubes
+			# get the ipr
+			iprvec.append( self.iprHighestStatefd(nb)  )
+
+		return np.mean(iprvec)
+	
+	def HCSIDisrfd(self):
+		csivec = []
+		for i in range( self.Ndisr ):
+			# create a disorder realization
+			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
+			# force that sum is Ntubes
+			offset = np.sum(nb) - self.Ntubes 
+			nb = nb - offset/self.Ntubes
+			# get the ipr
+			csivec.append( self.csiHighestStatefd(nb)  )
+
+		return np.mean(csivec)
+	
+	def iprAllStates(self, nb):
+		ham = self.makeBogoMat(nb)
+		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
+		iprv = [ipr( vec[:, i] ) for i in range(vec.shape[1])]
+		#print(f'val:{val}')
+		#print(f'iprv:{iprv}')
+		return [val, iprv]
+	
+	def iprAllStatesfd(self, nb):
+		ham = self.makeBogoMat(nb)
+		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
+		iprv = [iprfd( vec[:, i] ) for i in range(vec.shape[1])]
+		#print(f'val:{val}')
+		#print(f'iprv:{iprv}')
+		return [val, iprv]
+	
 	def IPRAllDisr(self):
 		iprvec = []
 		iprval = []
@@ -205,7 +452,23 @@ class dipolarBEC():
 			iprval.append( self.iprAllStates(nb)[0]  )
 		return np.mean(iprval, axis=0),np.mean(iprvec, axis=0)
 	
-	def visc_k_ij(self, ny, i,j, nb): 
+	def IPRAllDisrfd(self):
+		iprvec = []
+		iprval = []
+		for i in range( self.Ndisr ):
+			# create a disorder realization
+			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
+			# force that sum is Ntubes
+			offset = np.sum(nb) - self.Ntubes 
+			nb = nb - offset/self.Ntubes
+			# get the ipr and the corresponding energy
+			iprvec.append( self.iprAllStatesfd(nb)[1]  )
+			iprval.append( self.iprAllStatesfd(nb)[0]  )
+		return np.mean(iprval, axis=0),np.mean(iprvec, axis=0)
+	
+### VISCOSITY FUNCTIONS
+
+	def visc_k_ij(self, ny, i, j, nb): 
 		val_s, U, V = self.BogUV(nb)
 		int_k = 0
 
@@ -213,24 +476,33 @@ class dipolarBEC():
 			if y+ny <= self.Ntubes:
 				term_uuvv = U[y-1,i-1]*np.conj(U[y+ny-1,i-1])*V[y-1,j-1]*np.conj(V[y+ny-1,j-1])
 				term_uvvu = U[y-1,i-1]*np.conj(V[y+ny-1,i-1])*V[y-1,j-1]*np.conj(U[y+ny-1,j-1])
-				int_k += (self.kx**2)*(term_uuvv - term_uvvu)
+				int_k += -2*(self.kx**2)*(term_uuvv - term_uvvu)
 			else:
 				int_k += 0
 
 		return int_k
+	
+	def visc_k_0(self, ny, nb): 
+		int0_k = 0
 
-	def visc_k_time(self,ny, time, nb): 
+		for i in range(1,self.Ntubes + 1):
+			for j in range(1,self.Ntubes + 1):
+				int0_k += self.visc_k_ij(ny,i,j,nb)
+
+		return int0_k
+
+	def visc_k_time(self, ny, time, nb): 
 		val_s,U,V = self.BogUV(nb)
 		intd_k = 0
 
 		for i in range(1,self.Ntubes + 1):
 			for j in range(1,self.Ntubes + 1):
-				intd_k += -2*self.visc_k_ij(ny,i,j,nb)*np.sin( (val_s[i-1] + val_s[j-1] )*time)
+				intd_k += self.visc_k_ij(ny,i,j,nb)*np.sin( (val_s[i-1] + val_s[j-1] )*time)
 
 		return intd_k
 
 
-	def visc_k_om(self,ny,om, nb, gamma): 
+	def visc_k_om(self, ny, om, nb, gamma): 
 		val_s,U,V = self.BogUV(nb)
 		intd_ko = 0
 
