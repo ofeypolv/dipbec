@@ -102,7 +102,7 @@ class dipolarBEC():
 		Ud,	        # dipolar NN interaction
 		Ndisr,      # disorder realizations to average over
 		sigma,		# width of densities distributed along the tubes
-		NN_int = False,		# binary variable for NN vs 1/x^3 interaction
+		NN_int = True,		# binary variable for NN vs 1/x^3 interaction
 		sparseAlgo = [False, 80, 0.0],	# sparse = False, number of states = 80, around E = 0
 		prestr = '',				# prefix string for saving files
 		endstr = '',				# suffix string for saving files
@@ -178,7 +178,9 @@ class dipolarBEC():
 		zero_matrix_n = np.zeros((self.Ntubes, self.Ntubes))
 		s3n = np.block([[identity_matrix_n, zero_matrix_n],[zero_matrix_n, -identity_matrix_n]])
 		normalization = np.sqrt(np.einsum('ij,ij->j', vec, np.matmul(s3n, vec)))
+		#print('check state normalization:', normalization)
 		vec = vec / normalization
+		#print('check state normalization:', np.sqrt(np.einsum('ij,ij->j', vec, np.matmul(s3n, vec))))
 		return vec
 	
 	def wfLowestState(self):
@@ -193,13 +195,11 @@ class dipolarBEC():
 	def iprLowestState(self, nb):
 		ham = self.makeBogoMat(nb)
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
-		#vec = self.norm(vec)
 		return ipr( vec[:, 0] )
 	
 	def csiLowestState(self, nb):
 		ham = self.makeBogoMat(nb)
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
-		#vec = self.norm(vec)
 		return csi( vec[:, 0] )
 	
 	def iprLowestStatefd(self, nb):
@@ -217,14 +217,12 @@ class dipolarBEC():
 	def iprMidState(self, nb):
 		ham = self.makeBogoMat(nb)
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
-		#vec = self.norm(vec)
 		Lm = vec.shape[1] // 2
 		return ipr( vec[:, Lm] )
 	
 	def csiMidState(self, nb):
 		ham = self.makeBogoMat(nb)
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
-		#vec = self.norm(vec)
 		Lm = vec.shape[1] // 2
 		return csi( vec[:, Lm] )
 	
@@ -245,13 +243,11 @@ class dipolarBEC():
 	def iprHighestState(self, nb):
 		ham = self.makeBogoMat(nb)
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
-		#vec = self.norm(vec)
 		return ipr(vec[:, -1])
 	
 	def csiHighestState(self, nb):
 		ham = self.makeBogoMat(nb)
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
-		#vec = self.norm(vec)
 		return csi(vec[:, -1])
 	
 	def iprHighestStatefd(self, nb):
@@ -287,7 +283,7 @@ class dipolarBEC():
 			# force that sum is Ntubes
 			offset = np.sum(nb) - self.Ntubes 
 			nb = nb - offset/self.Ntubes
-			# get the ipr
+			# get the csi
 			csivec.append( self.csiLowestState(nb)  )
 		
 		return np.mean(csivec)
@@ -313,7 +309,7 @@ class dipolarBEC():
 			# force that sum is Ntubes
 			offset = np.sum(nb) - self.Ntubes 
 			nb = nb - offset/self.Ntubes
-			# get the ipr
+			# get the csi
 			csivec.append( self.csiLowestStatefd(nb)  )
 		
 		return np.mean(csivec)
@@ -339,7 +335,7 @@ class dipolarBEC():
 			# force that sum is Ntubes
 			offset = np.sum(nb) - self.Ntubes 
 			nb = nb - offset/self.Ntubes
-			# get the ipr
+			# get the csi
 			csivec.append( self.csiMidState(nb)  )
 
 		return np.mean(csivec)
@@ -365,7 +361,7 @@ class dipolarBEC():
 			# force that sum is Ntubes
 			offset = np.sum(nb) - self.Ntubes 
 			nb = nb - offset/self.Ntubes
-			# get the ipr
+			# get the csi
 			csivec.append( self.csiMidStatefd(nb)  )
 
 		return np.mean(csivec)
@@ -391,7 +387,7 @@ class dipolarBEC():
 			# force that sum is Ntubes
 			offset = np.sum(nb) - self.Ntubes 
 			nb = nb - offset/self.Ntubes
-			# get the ipr
+			# get the csi
 			csivec.append( self.csiHighestState(nb)  )
 
 		return np.mean(csivec)
@@ -417,7 +413,7 @@ class dipolarBEC():
 			# force that sum is Ntubes
 			offset = np.sum(nb) - self.Ntubes 
 			nb = nb - offset/self.Ntubes
-			# get the ipr
+			# get the csi
 			csivec.append( self.csiHighestStatefd(nb)  )
 
 		return np.mean(csivec)
@@ -433,6 +429,7 @@ class dipolarBEC():
 	def iprAllStatesfd(self, nb):
 		ham = self.makeBogoMat(nb)
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
+		vec = self.norm(vec)
 		iprv = [iprfd( vec[:, i] ) for i in range(vec.shape[1])]
 		#print(f'val:{val}')
 		#print(f'iprv:{iprv}')
