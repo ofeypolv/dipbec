@@ -102,7 +102,7 @@ class dipolarBEC():
 		Ud,	        # dipolar NN interaction
 		Ndisr,      # disorder realizations to average over
 		sigma,		# width of densities distributed along the tubes
-		NN_int = True,		# binary variable for NN vs 1/x^3 interaction
+		NN_int = False,		# binary variable for NN vs 1/x^3 interaction
 		sparseAlgo = [False, 80, 0.0],	# sparse = False, number of states = 80, around E = 0
 		prestr = '',				# prefix string for saving files
 		endstr = '',				# suffix string for saving files
