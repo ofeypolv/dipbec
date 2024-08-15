@@ -79,7 +79,7 @@ def dirac_delta(x, a): #Dirac delta as a limit of a Lorentzian, a=1e-3
 #### 					THE CLASS BEGINS						####
 ####################################################################
 
-class dipolarBEC():
+class dipolarBECnb():
 
 	# input parameters:
 	# Ntubes : number of tubes
@@ -101,7 +101,7 @@ class dipolarBEC():
 		Uc,			# contact interaction
 		Ud,	        # dipolar NN interaction
 		Ndisr,      # disorder realizations to average over
-		sigma,		# width of densities distributed along the tubes
+		nb,		# densities along the tubes
 		NN_int = False,		# binary variable for NN vs 1/x^3 interaction
 		sparseAlgo = [False, 80, 0.0],	# sparse = False, number of states = 80, around E = 0
 		prestr = '',				# prefix string for saving files
@@ -115,7 +115,7 @@ class dipolarBEC():
 		self.NN_int = NN_int 
 		self.Ud = Ud
 		self.Ndisr = int(Ndisr)
-		self.sigma = sigma
+		self.nb = nb
 		self.sparseAlgo = sparseAlgo
 		self.prestr = prestr
 		self.endstr = endstr
@@ -127,7 +127,7 @@ class dipolarBEC():
 			self._valvec = lambda H, nbands, Ef: valvec(H)
 
 
-	def makeBogoMat(self, nb):
+	def makeBogoMat(self):
 		# given an array of Boson densities, make the Bogo Matrix
 		h_1 = np.zeros( [self.Ntubes, self.Ntubes] )
 		h_2 = np.zeros( [self.Ntubes, self.Ntubes] )
@@ -135,16 +135,16 @@ class dipolarBEC():
 		for i in range(self.Ntubes):
 			for j in range(self.Ntubes):
 				if ( i==j ):
-					h_1[i,j] = (self.kx**2)/(2.0) + self.Uc*nb[i]
-					h_2[i,j] = self.Uc*nb[i]
+					h_1[i,j] = (self.kx**2)/(2.0) + self.Uc*self.nb[i]
+					h_2[i,j] = self.Uc*self.nb[i]
 				else:
 					if self.NN_int:
 						if (abs(i-j)<2): #Nearest neighbor dipolar interaction
-							h_1[i,j] = self.Ud*(math.sqrt(nb[i]*nb[j]))
-							h_2[i,j] = self.Ud*(math.sqrt(nb[i]*nb[j]))
+							h_1[i,j] = self.Ud*(math.sqrt(self.nb[i]*self.nb[j]))
+							h_2[i,j] = self.Ud*(math.sqrt(self.nb[i]*self.nb[j]))
 					else: #1/x^3 dipolar interaction
-						h_1[i,j] = self.Ud*(math.sqrt(nb[i]*nb[j]))*2*self.kx*kn(1,abs(i-j)*self.kx)/(abs(i-j))
-						h_2[i,j] = self.Ud*(math.sqrt(nb[i]*nb[j]))*2*self.kx*kn(1,abs(i-j)*self.kx)/(abs(i-j))
+						h_1[i,j] = self.Ud*(math.sqrt(self.nb[i]*self.nb[j]))*2*self.kx*kn(1,abs(i-j)*self.kx)/(abs(i-j))
+						h_2[i,j] = self.Ud*(math.sqrt(self.nb[i]*self.nb[j]))*2*self.kx*kn(1,abs(i-j)*self.kx)/(abs(i-j))
 
 
 		Haml = np.block([[h_1,h_2],[-h_2,-h_1]])
@@ -161,13 +161,13 @@ class dipolarBEC():
 		#print('check state normalization:', np.sqrt(np.einsum('ij,ij->j', vec, np.matmul(s3n, vec))))
 		return vec
 
-	def BogUV(self, nb):
+	def BogUV(self):
 	# given the Bogo matrix, we extract the U and V matrices from its eigenvectors
 		identity_matrix_n = np.eye(self.Ntubes)
 		zero_matrix_n = np.zeros((self.Ntubes, self.Ntubes))
 		s3n = np.block([[identity_matrix_n, zero_matrix_n],[zero_matrix_n, -identity_matrix_n]]) #s3n is the n-dim pauli matrix sigmaz
 		pn = np.block([[zero_matrix_n, identity_matrix_n],[1*identity_matrix_n, zero_matrix_n]]) #pn is the n-dim parity matrix
-		ham = self.makeBogoMat(nb)
+		ham = self.makeBogoMat()
 		#Normalize the eigenvectors wrt matrix s3n using broadcasting
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2])
 		vec = self.norm(vec)
@@ -182,250 +182,274 @@ class dipolarBEC():
 		return val,U,V	
 	
 	def wfLowestState(self):
-		nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
-		ham = self.makeBogoMat(nb)
+		ham = self.makeBogoMat()
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
 		vec = self.norm(vec)
 		return wf( vec[:, 0] )
 	
 	### IPR FUNCTIONS
 
-	def iprLowestState(self, nb):
-		ham = self.makeBogoMat(nb)
+	def iprLowestState(self):
+		ham = self.makeBogoMat()
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
 		return ipr( vec[:, 0] )
 	
-	def csiLowestState(self, nb):
-		ham = self.makeBogoMat(nb)
+	def csiLowestState(self):
+		ham = self.makeBogoMat()
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
 		return csi( vec[:, 0] )
 	
-	def iprLowestStatefd(self, nb):
-		ham = self.makeBogoMat(nb)
+	def iprLowestStatefd(self):
+		ham = self.makeBogoMat()
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
 		vec = self.norm(vec)
 		return iprfd( vec[:, 0] )
 	
-	def csiLowestStatefd(self, nb):
-		ham = self.makeBogoMat(nb)
+	def csiLowestStatefd(self):
+		ham = self.makeBogoMat()
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
 		vec = self.norm(vec)
 		return csifd( vec[:, 0] )
 	
-	def iprMidState(self, nb):
-		ham = self.makeBogoMat(nb)
+	def iprMidState(self):
+		ham = self.makeBogoMat()
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
 		Lm = vec.shape[1] // 2
 		return ipr( vec[:, Lm] )
 	
-	def csiMidState(self, nb):
-		ham = self.makeBogoMat(nb)
+	def csiMidState(self):
+		ham = self.makeBogoMat()
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
 		Lm = vec.shape[1] // 2
 		return csi( vec[:, Lm] )
 	
-	def iprMidStatefd(self, nb):
-		ham = self.makeBogoMat(nb)
+	def iprMidStatefd(self):
+		ham = self.makeBogoMat()
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
 		vec = self.norm(vec)
 		Lm = vec.shape[1] // 2
 		return iprfd( vec[:, Lm] )
 	
-	def csiMidStatefd(self, nb):
-		ham = self.makeBogoMat(nb)
+	def csiMidStatefd(self):
+		ham = self.makeBogoMat()
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
 		vec = self.norm(vec)
 		Lm = vec.shape[1] // 2
 		return csifd( vec[:, Lm] )
 	
-	def iprHighestState(self, nb):
-		ham = self.makeBogoMat(nb)
+	def iprHighestState(self):
+		ham = self.makeBogoMat()
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
 		return ipr(vec[:, -1])
 	
-	def csiHighestState(self, nb):
-		ham = self.makeBogoMat(nb)
+	def csiHighestState(self):
+		ham = self.makeBogoMat()
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
 		return csi(vec[:, -1])
 	
-	def iprHighestStatefd(self, nb):
-		ham = self.makeBogoMat(nb)
+	def iprHighestStatefd(self):
+		ham = self.makeBogoMat()
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
 		vec = self.norm(vec)
 		return iprfd(vec[:, -1])
 	
-	def csiHighestStatefd(self, nb):
-		ham = self.makeBogoMat(nb)
+	def csiHighestStatefd(self):
+		ham = self.makeBogoMat()
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
 		vec = self.norm(vec)
 		return csifd(vec[:, -1])
 	
 	def LIPRDisr(self):
 		iprvec = []
+		# Store the original value of self.nb
+		original_nb = self.nb
 		for i in range( self.Ndisr ):
-			# create a disorder realization
-			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
 			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
+			offset = np.sum(self.nb) - self.Ntubes 
+			self.nb = self.nb - offset/self.Ntubes
 			# get the ipr
-			iprvec.append( self.iprLowestState(nb)  )
+			iprvec.append( self.iprLowestState()  )
+			# Reset self.nb to its original value
+			#self.nb = original_nb
 		
 		return np.mean(iprvec)
 	
 	def LCSIDisr(self):
 		csivec = []
+		# Store the original value of self.nb
+		original_nb = self.nb
 		for i in range( self.Ndisr ):
-			# create a disorder realization
-			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
 			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
+			offset = np.sum(self.nb) - self.Ntubes 
+			self.nb = self.nb - offset/self.Ntubes
 			# get the csi
-			csivec.append( self.csiLowestState(nb)  )
+			csivec.append( self.csiLowestState()  )
+			# Reset self.nb to its original value
+			#self.nb = original_nb
 		
 		return np.mean(csivec)
 	
 	def LIPRDisrfd(self):
 		iprvec = []
+		# Store the original value of self.nb
+		original_nb = self.nb
 		for i in range( self.Ndisr ):
-			# create a disorder realization
-			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
 			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
+			offset = np.sum(self.nb) - self.Ntubes 
+			self.nb = self.nb - offset/self.Ntubes
 			# get the ipr
-			iprvec.append( self.iprLowestStatefd(nb)  )
+			iprvec.append( self.iprLowestStatefd()  )
+			# Reset self.nb to its original value
+			#self.nb = original_nb
 		
 		return np.mean(iprvec)
 	
 	def LCSIDisrfd(self):
 		csivec = []
+		# Store the original value of self.nb
+		original_nb = self.nb
 		for i in range( self.Ndisr ):
-			# create a disorder realization
-			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
 			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
+			offset = np.sum(self.nb) - self.Ntubes 
+			self.nb = self.nb - offset/self.Ntubes
 			# get the csi
-			csivec.append( self.csiLowestStatefd(nb)  )
+			csivec.append( self.csiLowestStatefd()  )
+			# Reset self.nb to its original value
+			#self.nb = original_nb
 		
 		return np.mean(csivec)
 	
 	def MIPRDisr(self):
 		iprvec = []
+		# Store the original value of self.nb
+		original_nb = self.nb
 		for i in range( self.Ndisr ):
-			# create a disorder realization
-			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
 			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
+			offset = np.sum(self.nb) - self.Ntubes 
+			self.nb = self.nb - offset/self.Ntubes
 			# get the ipr
-			iprvec.append( self.iprMidState(nb)  )
+			iprvec.append( self.iprMidState()  )
+			# Reset self.nb to its original value
+			#self.nb = original_nb
 
 		return np.mean(iprvec)
 	
 	def MCSIDisr(self):
 		csivec = []
+		# Store the original value of self.nb
+		original_nb = self.nb
 		for i in range( self.Ndisr ):
-			# create a disorder realization
-			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
 			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
+			offset = np.sum(self.nb) - self.Ntubes 
+			self.nb = self.nb - offset/self.Ntubes
 			# get the csi
-			csivec.append( self.csiMidState(nb)  )
+			csivec.append( self.csiMidState()  )
+			# Reset self.nb to its original value
+			#self.nb = original_nb
 
 		return np.mean(csivec)
 	
 	def MIPRDisrfd(self):
 		iprvec = []
+		# Store the original value of self.nb
+		original_nb = self.nb
 		for i in range( self.Ndisr ):
-			# create a disorder realization
-			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
 			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
+			offset = np.sum(self.nb) - self.Ntubes 
+			self.nb = self.nb - offset/self.Ntubes
 			# get the ipr
-			iprvec.append( self.iprMidStatefd(nb)  )
+			iprvec.append( self.iprMidStatefd()  )
+			# Reset self.nb to its original value
+			#self.nb = original_nb
 
 		return np.mean(iprvec)
 	
 	def MCSIDisrfd(self):
 		csivec = []
+		# Store the original value of self.nb
+		original_nb = self.nb
 		for i in range( self.Ndisr ):
-			# create a disorder realization
-			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
 			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
+			offset = np.sum(self.nb) - self.Ntubes 
+			self.nb = self.nb - offset/self.Ntubes
 			# get the csi
-			csivec.append( self.csiMidStatefd(nb)  )
+			csivec.append( self.csiMidStatefd()  )
+			# Reset self.nb to its original value
+			#self.nb = original_nb
 
 		return np.mean(csivec)
 
 	def HIPRDisr(self):
 		iprvec = []
+		# Store the original value of self.nb
+		original_nb = self.nb
 		for i in range( self.Ndisr ):
-			# create a disorder realization
-			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
 			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
+			offset = np.sum(self.nb) - self.Ntubes 
+			self.nb = self.nb - offset/self.Ntubes
 			# get the ipr
-			iprvec.append( self.iprHighestState(nb)  )
+			iprvec.append( self.iprHighestState()  )
+			# Reset self.nb to its original value
+			#self.nb = original_nb
 
 		return np.mean(iprvec)
 	
 	def HCSIDisr(self):
 		csivec = []
+		# Store the original value of self.nb
+		original_nb = self.nb
 		for i in range( self.Ndisr ):
-			# create a disorder realization
-			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
 			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
+			offset = np.sum(self.nb) - self.Ntubes 
+			self.nb = self.nb - offset/self.Ntubes
 			# get the csi
-			csivec.append( self.csiHighestState(nb)  )
+			csivec.append( self.csiHighestState()  )
+			# Reset self.nb to its original value
+			#self.nb = original_nb
 
 		return np.mean(csivec)
 	
 	def HIPRDisrfd(self):
 		iprvec = []
-		for i in range( self.Ndisr ):
-			# create a disorder realization
-			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
-			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
-			# get the ipr
-			iprvec.append( self.iprHighestStatefd(nb)  )
-
+		# Store the original value of self.nb
+		original_nb = self.nb
+		for i in range( self.Ndisr ):  
+            # force that sum is Ntubes
+			offset = np.sum(self.nb) - self.Ntubes
+			self.nb = self.nb - offset/self.Ntubes
+            # get the ipr
+			iprvec.append( self.iprHighestStatefd()  )
+            # Reset self.nb to its original value
+			self.nb = original_nb
+			
 		return np.mean(iprvec)
+            
 	
 	def HCSIDisrfd(self):
 		csivec = []
+		# Store the original value of self.nb
+		original_nb = self.nb   
 		for i in range( self.Ndisr ):
-			# create a disorder realization
-			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
-			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
+            # force that sum is Ntubes
+			offset = np.sum(self.nb) - self.Ntubes
+			self.nb = self.nb - offset/self.Ntubes
 			# get the csi
-			csivec.append( self.csiHighestStatefd(nb)  )
+			csivec.append( self.csiHighestStatefd()  )
+            # Reset self.nb to its original value
+			#self.nb = original_nb
 
 		return np.mean(csivec)
 	
-	def iprAllStates(self, nb):
-		ham = self.makeBogoMat(nb)
+	def iprAllStates(self):
+		ham = self.makeBogoMat()
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
 		iprv = [ipr( vec[:, i] ) for i in range(vec.shape[1])]
 		#print(f'val:{val}')
 		#print(f'iprv:{iprv}')
 		return [val, iprv]
 	
-	def iprAllStatesfd(self, nb):
-		ham = self.makeBogoMat(nb)
+	def iprAllStatesfd(self):
+		ham = self.makeBogoMat()
 		val, vec = self._valvec(ham, self.sparseAlgo[1], self.sparseAlgo[2] )
 		vec = self.norm(vec)
 		iprv = [iprfd( vec[:, i] ) for i in range(vec.shape[1])]
@@ -436,35 +460,39 @@ class dipolarBEC():
 	def IPRAllDisr(self):
 		iprvec = []
 		iprval = []
+		# Store the original value of self.nb
+		original_nb = self.nb
 		for i in range( self.Ndisr ):
-			# create a disorder realization
-			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
 			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
+			offset = np.sum(self.nb) - self.Ntubes 
+			self.nb = self.nb - offset/self.Ntubes
 			# get the ipr and the corresponding energy
-			iprvec.append( self.iprAllStates(nb)[1]  )
-			iprval.append( self.iprAllStates(nb)[0]  )
+			iprvec.append( self.iprAllStates()[1]  )
+			iprval.append( self.iprAllStates()[0]  )
+			#self.nb = original_nb
+			
 		return np.mean(iprval, axis=0),np.mean(iprvec, axis=0)
 	
 	def IPRAllDisrfd(self):
 		iprvec = []
 		iprval = []
+		# Store the original value of self.nb
+		original_nb = self.nb
 		for i in range( self.Ndisr ):
-			# create a disorder realization
-			nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
 			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
+			offset = np.sum(self.nb) - self.Ntubes 
+			self.nb = self.nb - offset/self.Ntubes
 			# get the ipr and the corresponding energy
-			iprvec.append( self.iprAllStatesfd(nb)[1]  )
-			iprval.append( self.iprAllStatesfd(nb)[0]  )
+			iprvec.append( self.iprAllStatesfd()[1]  )
+			iprval.append( self.iprAllStatesfd()[0]  )
+			#self.nb = original_nb
+			
 		return np.mean(iprval, axis=0),np.mean(iprvec, axis=0)
 	
 ### VISCOSITY FUNCTIONS
-
-	def eta(self, y, yp, nb): 
-		val_s, U, V = self.BogUV(nb)
+	
+	def eta(self, y, yp): 
+		val_s, U, V = self.BogUV()
 		int_k = 0
 
 		for i in range(1,self.Ntubes + 1):
@@ -475,8 +503,8 @@ class dipolarBEC():
 
 		return int_k
 	
-	def eta0(self, y, yp, nb): 
-		val_s, U, V = self.BogUV(nb)
+	def eta0(self, y, yp): 
+		val_s, U, V = self.BogUV()
 		int_k = 0
 
 		for i in range(1,self.Ntubes + 1):
@@ -487,8 +515,8 @@ class dipolarBEC():
 
 		return int_k
 	
-	def eta0_lin(self, y, yp, nb): 
-		val_s, U, V = self.BogUV(nb)
+	def eta0_lin(self, y, yp): 
+		val_s, U, V = self.BogUV()
 		int_k = 0
 
 		for i in range(1,self.Ntubes + 1):
@@ -508,8 +536,8 @@ class dipolarBEC():
 
 		return int_k
 	
-	def etat(self, y, yp, t, nb): 
-		val_s, U, V = self.BogUV(nb)
+	def etat(self, y, yp, t): 
+		val_s, U, V = self.BogUV()
 		int_k = 0
 
 		for i in range(1,self.Ntubes + 1):
@@ -521,126 +549,14 @@ class dipolarBEC():
 		return int_k
 
 
-	def etaom(self, y, yp, om, gamma, nb): 
-		val_s,U,V = self.BogUV(nb)
+	def etaom(self, y, yp, om, gamma): 
+		val_s,U,V = self.BogUV()
 		int_k = 0
 
 		for i in range(1,self.Ntubes + 1):
 			for j in range(1,self.Ntubes + 1):
 				fc_plus = 1/(om + val_s[i-1] + val_s[j-1] + 1j*gamma ) #plemelj-sokhotski formula
 				fc_mnus = 1/(om - val_s[i-1] - val_s[j-1] + 1j*gamma ) #plemelj-sokhotski formula
-				int_k += self.eta(y,yp,nb)*(fc_plus-fc_mnus)
+				int_k += self.visc_k_ij_all(y,yp)*(fc_plus-fc_mnus)
 
 		return int_k
-	
-
-	def etaDisr(self, y, yp):
-		visc = []
-		nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
-		for i in range(self.Ndisr):
-			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
-			# get the ipr
-			visc.append(self.eta(y, yp, nb))
-
-		return np.mean(visc)
-
-	def etaHist(self, y, yp):
-		visc = []
-		nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
-		for i in range(self.Ndisr):
-			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
-			# get the ipr
-			visc.append(self.eta(y, yp, nb))
-
-		# Plot the histogram
-		plt.hist(visc, bins=30, edgecolor='black')
-		plt.title('Histogram of visc values')
-		plt.xlabel('Value')
-		plt.ylabel('Frequency')
-		plt.show()
-
-	def eta0Disr(self, y, yp):
-		visc = []
-		nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
-		for i in range(self.Ndisr):
-			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
-			# get the ipr
-			visc.append(self.eta0(y, yp, nb))
-
-		return np.mean(visc)
-	
-	def eta0Hist(self, y, yp):
-		visc = []
-		nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
-		for i in range(self.Ndisr):
-			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
-			# get the ipr
-			visc.append(self.eta0(y, yp, nb))
-		print(visc)
-		# Plot the histogram
-		plt.hist(visc, bins=30, edgecolor='black')
-		plt.title('Histogram of visc values')
-		plt.xlabel('Value')
-		plt.ylabel('Frequency')
-		plt.show()
-
-	def eta0lDisr(self, y, yp):
-		visc = []
-		nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
-		for i in range(self.Ndisr):
-			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
-			# get the ipr
-			visc.append(self.eta0_lin(y, yp, nb))
-
-		return np.mean(visc)
-	
-	def eta0lHist(self, y, yp):
-		visc = []
-		nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
-		for i in range(self.Ndisr):
-			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
-			# get the ipr
-			visc.append(self.eta0_lin(y, yp, nb))
-		print(visc)
-		# Plot the histogram
-		plt.hist(visc, bins=30, edgecolor='black')
-		plt.title('Histogram of visc values')
-		plt.xlabel('Value')
-		plt.ylabel('Frequency')
-		plt.show()
-
-	def etatDisr(self, y, yp, t):
-		visc = []
-		nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
-		for i in range(self.Ndisr):
-			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
-			# get the ipr
-			visc.append(self.etat(y, yp, t, nb))
-
-		return np.mean(visc)
-	
-	def etaoDisr(self, y, yp, om, gamma):
-		visc = []
-		nb = np.random.uniform(1-self.sigma, 1+self.sigma, self.Ntubes)
-		for i in range(self.Ndisr):
-			# force that sum is Ntubes
-			offset = np.sum(nb) - self.Ntubes 
-			nb = nb - offset/self.Ntubes
-			# get the ipr
-			visc.append(self.etaom(y, yp, om, gamma, nb))
-
-		return np.mean(visc)
